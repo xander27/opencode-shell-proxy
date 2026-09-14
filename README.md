@@ -30,9 +30,10 @@ plugins are loaded once at startup.
 
 The proxy URL is resolved at startup, in priority order:
 
-1. `OPENCODE_SHELL_PROXY` environment variable
+1. `OPENCODE_SHELL_PROXY` environment variable — for setups without secrets
 2. `~/.config/opencode/shell-proxy.env` file containing the URL on a single line
-3. Default `http://127.0.0.1:8080`
+
+If neither is set, the plugin does nothing.
 
 The variable is inert outside opencode — other apps never read it, so it is
 safe to keep it in your `.zshrc`.
@@ -52,6 +53,28 @@ printf '%s\n' 'socks5h://user:pass@host:1080' > ~/.config/opencode/shell-proxy.e
 
 `NO_PROXY=localhost,127.0.0.1` is always set so local traffic (including the
 opencode TUI server) stays direct.
+
+## Health check
+
+The plugin verifies the proxy before using it: it runs
+`curl -fsS --proxy <url> <check-url>` at startup and re-checks lazily at most
+once every 5 minutes (each check has a 10 second timeout, and `shell.env` waits
+for a pending check to finish, so a command may stall up to 10 seconds when a
+re-check is due).
+
+- Check succeeds → `HTTPS_PROXY` / `HTTP_PROXY` are injected into shell calls.
+- Check fails → nothing is injected (traffic goes direct), a warning toast is
+  shown in the TUI and an error is written to the opencode log.
+- Proxy comes back → a success toast is shown and routing resumes.
+
+Tune the check with:
+
+```bash
+export OPENCODE_SHELL_PROXY_CHECK_URL=https://example.com   # default
+```
+
+Point it at a host you actually care about to verify end-to-end reachability.
+Requires `curl` on PATH.
 
 ### SOCKS5 proxies
 
