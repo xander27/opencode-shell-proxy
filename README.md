@@ -28,20 +28,56 @@ plugins are loaded once at startup.
 
 ## Configuration
 
-Proxy URL is read from the `OPENCODE_SHELL_PROXY` environment variable at
-startup, with a default of `http://127.0.0.1:8080`:
+The proxy URL is resolved at startup, in priority order:
+
+1. `OPENCODE_SHELL_PROXY` environment variable
+2. `~/.config/opencode/shell-proxy.env` file containing the URL on a single line
+3. Default `http://127.0.0.1:8080`
+
+The variable is inert outside opencode — other apps never read it, so it is
+safe to keep it in your `.zshrc`.
+
+### Secrets
+
+If the proxy requires credentials (`socks5h://user:pass@host:port`), prefer the
+file: it stays out of shell rc-files, which often end up synced to dotfiles
+repositories.
 
 ```bash
-OPENCODE_SHELL_PROXY=http://127.0.0.1:8080 opencode
+umask 077
+printf '%s\n' 'socks5h://user:pass@host:1080' > ~/.config/opencode/shell-proxy.env
 ```
 
-The variable is inert outside opencode — other apps never see it, so it is safe
-to keep it in your `.zshrc`. If the proxy requires credentials
-(`http://user:pass@host:port`), pass them via this variable rather than
-committing them anywhere.
+`umask 077` creates the file readable only by your user. Never commit it.
 
 `NO_PROXY=localhost,127.0.0.1` is always set so local traffic (including the
 opencode TUI server) stays direct.
+
+### SOCKS5 proxies
+
+Prefer the `socks5h://` scheme over `socks5://`: with `socks5h` DNS resolution
+also goes through the proxy, which matters when local DNS is unreliable for the
+target host. Note that SOCKS URLs in env vars are understood by curl, git and
+other libcurl-based tools, but not by everything (e.g. wget, many Node and
+Python HTTP clients). For universal support, front the SOCKS proxy with an
+HTTP bridge such as [gost](https://github.com/go-gost/gost):
+`gost -L http://:8080 -F socks5://proxy:1080` and point this plugin at
+`http://127.0.0.1:8080`.
+
+## Orca
+
+[Orca](https://orca.run) launches opencode sessions with a shared config dir
+(`~/.config/orca/opencode-hooks/shared`), which replaces the global one. To get
+the plugin in every Orca-spawned opencode, copy it there too:
+
+```bash
+mkdir -p ~/.config/orca/opencode-hooks/shared/plugins
+cp proxy.js ~/.config/orca/opencode-hooks/shared/plugins/
+```
+
+The secret file path from [Configuration](#configuration) is absolute
+(`~/.config/opencode/shell-proxy.env`), so it is picked up regardless of which
+config dir the session uses.
 
 ## Limitations
 
