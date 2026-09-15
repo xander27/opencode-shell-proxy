@@ -81,6 +81,17 @@ At startup the plugin:
    TUI and an error is written to the opencode log. When the proxy comes
    back, a success toast is shown and routing resumes automatically.
 
+Notes:
+
+- gost does not accept the `socks5h://` scheme, so the plugin normalizes it
+  to `socks5://` for the bridge. Remote DNS resolution is preserved — verified
+  against DNS-poisoned hosts.
+- On a cold start (very first run, while `gost` is being downloaded) LLM
+  requests may go direct for a few seconds until the first health check
+  completes. Shell commands always wait for the check and are gated correctly.
+- Set `OPENCODE_SHELL_PROXY_DEBUG=1` to append plugin diagnostics to
+  `/tmp/opencode/plugin-debug.log`.
+
 `NO_PROXY=localhost,127.0.0.1` is always honoured so local traffic (including
 the opencode TUI server) stays direct.
 

@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process"
 import { createHash } from "node:crypto"
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import { createConnection } from "node:net"
 import { homedir, platform, arch, tmpdir } from "node:os"
 import { join } from "node:path"
@@ -25,6 +25,13 @@ const fromFile = () => {
   } catch {
     return undefined
   }
+}
+
+const debug = (msg) => {
+  if (!process.env.OPENCODE_SHELL_PROXY_DEBUG) return
+  try {
+    appendFileSync("/tmp/opencode/plugin-debug.log", `${new Date().toISOString()} ${msg}\n`)
+  } catch {}
 }
 
 const redact = (url) => url.replace(/\/\/[^/@]*@/, "//***@")
@@ -105,7 +112,7 @@ const ensureBridge = async (upstream, report) => {
     report("error", `cannot obtain gost: ${e.message}`)
     return false
   }
-  spawn(bin, ["-L", `http://127.0.0.1:${BRIDGE_PORT()}`, "-F", upstream], {
+  spawn(bin, ["-L", `http://127.0.0.1:${BRIDGE_PORT()}`, "-F", upstream.replace(/^socks5h:\/\//, "socks5://")], {
     stdio: "ignore",
     detached: true,
   }).unref()
@@ -195,12 +202,16 @@ export const ProxyPlugin = async ({ client }) => {
       }
       if (ok) llmOn()
       else llmOff()
+      debug(`check ok=${ok} llmEnv=${process.env.HTTPS_PROXY ?? "(none)"}`)
       available = ok
       return ok
     })
     return checking
   }
 
+  debug(`init url=${redact(upstream)} bridged=${bridged} portListening=${await portListening(BRIDGE_PORT())}`)
+  if (!bridged || (await portListening(BRIDGE_PORT()))) llmOn()
+  report("info", `initialized, upstream=${redact(upstream)} bridged=${bridged} proxyUrl=${redact(proxyUrl)}`)
   check()
 
   return {
