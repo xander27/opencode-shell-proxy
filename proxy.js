@@ -21,8 +21,10 @@ const OS_MAP = { linux: "linux", darwin: "darwin", freebsd: "freebsd" }
 
 const fromFile = () => {
   try {
-    const url = readFileSync(SECRET_FILE(), "utf8").trim()
-    return url || undefined
+    const raw = readFileSync(SECRET_FILE(), "utf8").trim()
+    if (!raw) return undefined
+    const kv = raw.match(/^(?:UPSTREAM|URL|PROXY)=(.+)$/m)
+    return (kv ? kv[1] : raw).trim() || undefined
   } catch {
     return undefined
   }

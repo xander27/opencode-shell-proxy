@@ -1,0 +1,12 @@
+[Unit]
+Description=opencode-shell-proxy: local HTTP bridge to upstream proxy (gost)
+After=network-online.target
+
+[Service]
+EnvironmentFile=%h/.config/opencode/shell-proxy.env
+ExecStart=%h/.cache/opencode-shell-proxy/gost -L http://127.0.0.1:18181 -F ${UPSTREAM}
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
