@@ -141,6 +141,8 @@ export const ProxyPlugin = async ({ client }) => {
   let reported = false
   let lastCheckAt = 0
   let checking = null
+  let proxyActive = false
+  let fetchPatched = false
 
   const report = (level, message) => {
     client?.app?.log({ body: { service: "opencode-shell-proxy", level, message } })?.catch?.(() => {})
@@ -150,7 +152,30 @@ export const ProxyPlugin = async ({ client }) => {
     client?.tui?.showToast({ body: { title: "shell-proxy", message, variant, duration: 5000 } })?.catch?.(() => {})
   }
 
+  const noProxyHosts = () => new Set(["localhost", "127.0.0.1", "::1", ...NO_PROXY_LIST().split(",").map((s) => s.trim()).filter(Boolean)])
+
+  const patchFetch = () => {
+    if (fetchPatched) return
+    fetchPatched = true
+    const origFetch = globalThis.fetch
+    globalThis.fetch = (input, init) => {
+      if (!proxyActive) return origFetch(input, init)
+      let url = ""
+      if (typeof input === "string") url = input
+      else if (input instanceof URL) url = input.href
+      else if (input && typeof input.url === "string") url = input.url
+      if (!/^https?:\/\//i.test(url)) return origFetch(input, init)
+      try {
+        if (noProxyHosts().has(new URL(url).hostname)) return origFetch(input, init)
+      } catch {
+        return origFetch(input, init)
+      }
+      return origFetch(input, { ...init, proxy: proxyUrl })
+    }
+  }
+
   const llmOn = () => {
+    proxyActive = true
     for (const k of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]) process.env[k] = proxyUrl
     for (const k of ["NO_PROXY", "no_proxy"]) process.env[k] = NO_PROXY_LIST()
   }
@@ -158,6 +183,7 @@ export const ProxyPlugin = async ({ client }) => {
   const sanePrev = (v) => (/^https?:\/\//.test(v) ? v : undefined)
 
   const llmOff = () => {
+    proxyActive = false
     for (const k of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]) {
       const v = sanePrev(prev[k])
       if (v !== undefined) process.env[k] = v
@@ -212,6 +238,7 @@ export const ProxyPlugin = async ({ client }) => {
 
   const bridgeUp = await portListening(BRIDGE_PORT())
   debug(`init url=${redact(upstream)} bridged=${bridged} portListening=${bridgeUp}`)
+  patchFetch()
   if (!bridged || bridgeUp) llmOn()
   report("info", `initialized, upstream=${redact(upstream)} bridged=${bridged} proxyUrl=${redact(proxyUrl)}`)
   check()
