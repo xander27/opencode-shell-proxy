@@ -14,6 +14,7 @@ const BRIDGE_PORT = () => Number(process.env.OPENCODE_SHELL_PROXY_BRIDGE_PORT) |
 const CHECK_URL = () => process.env.OPENCODE_SHELL_PROXY_CHECK_URL || "https://example.com"
 const CHECK_TIMEOUT_MS = () => Number(process.env.OPENCODE_SHELL_PROXY_CHECK_TIMEOUT_MS) || 10_000
 const RECHECK_MS = () => Number(process.env.OPENCODE_SHELL_PROXY_RECHECK_MS) || 5 * 60_000
+const NO_PROXY_LIST = () => process.env.OPENCODE_SHELL_PROXY_NO_PROXY || "localhost,127.0.0.1"
 
 const ARCH_MAP = { x64: "amd64", arm64: "arm64", arm: "armv7", ia32: "386" }
 const OS_MAP = { linux: "linux", darwin: "darwin", freebsd: "freebsd" }
@@ -131,8 +132,8 @@ export const ProxyPlugin = async ({ client }) => {
   const bridged = /^socks5h?:\/\//.test(upstream)
   const proxyUrl = bridged ? `http://127.0.0.1:${BRIDGE_PORT()}` : upstream
 
-  const prevHttps = process.env.HTTPS_PROXY
-  const prevHttp = process.env.HTTP_PROXY
+  const prev = {}
+  for (const k of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]) prev[k] = process.env[k]
 
   let available = false
   let reported = false
@@ -148,21 +149,19 @@ export const ProxyPlugin = async ({ client }) => {
   }
 
   const llmOn = () => {
-    process.env.HTTPS_PROXY = proxyUrl
-    process.env.HTTP_PROXY = proxyUrl
-    process.env.NO_PROXY = "localhost,127.0.0.1"
+    for (const k of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]) process.env[k] = proxyUrl
+    for (const k of ["NO_PROXY", "no_proxy"]) process.env[k] = NO_PROXY_LIST()
   }
 
   const sanePrev = (v) => (/^https?:\/\//.test(v) ? v : undefined)
 
   const llmOff = () => {
-    const https = sanePrev(prevHttps)
-    const http = sanePrev(prevHttp)
-    if (https !== undefined) process.env.HTTPS_PROXY = https
-    else delete process.env.HTTPS_PROXY
-    if (http !== undefined) process.env.HTTP_PROXY = http
-    else delete process.env.HTTP_PROXY
-    process.env.NO_PROXY = "localhost,127.0.0.1"
+    for (const k of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]) {
+      const v = sanePrev(prev[k])
+      if (v !== undefined) process.env[k] = v
+      else delete process.env[k]
+    }
+    for (const k of ["NO_PROXY", "no_proxy"]) process.env[k] = NO_PROXY_LIST()
   }
 
   const check = () => {
@@ -209,8 +208,9 @@ export const ProxyPlugin = async ({ client }) => {
     return checking
   }
 
-  debug(`init url=${redact(upstream)} bridged=${bridged} portListening=${await portListening(BRIDGE_PORT())}`)
-  if (!bridged || (await portListening(BRIDGE_PORT()))) llmOn()
+  const bridgeUp = await portListening(BRIDGE_PORT())
+  debug(`init url=${redact(upstream)} bridged=${bridged} portListening=${bridgeUp}`)
+  if (!bridged || bridgeUp) llmOn()
   report("info", `initialized, upstream=${redact(upstream)} bridged=${bridged} proxyUrl=${redact(proxyUrl)}`)
   check()
 
@@ -218,12 +218,11 @@ export const ProxyPlugin = async ({ client }) => {
     "shell.env": async (input, output) => {
       if (Date.now() - lastCheckAt > RECHECK_MS()) await check()
       if (!available) {
-        output.env.NO_PROXY = "*"
+        for (const k of ["NO_PROXY", "no_proxy"]) output.env[k] = "*"
         return
       }
-      output.env.HTTPS_PROXY = proxyUrl
-      output.env.HTTP_PROXY = proxyUrl
-      output.env.NO_PROXY = "localhost,127.0.0.1"
+      for (const k of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]) output.env[k] = proxyUrl
+      for (const k of ["NO_PROXY", "no_proxy"]) output.env[k] = NO_PROXY_LIST()
     },
   }
 }

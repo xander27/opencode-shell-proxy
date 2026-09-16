@@ -56,6 +56,8 @@ Optional environment variables:
 | `OPENCODE_SHELL_PROXY_CHECK_URL` | `https://example.com` | Health-check target |
 | `OPENCODE_SHELL_PROXY_CHECK_TIMEOUT_MS` | `10000` | Health-check curl timeout |
 | `OPENCODE_SHELL_PROXY_RECHECK_MS` | `300000` | Re-check interval |
+| `OPENCODE_SHELL_PROXY_NO_PROXY` | `localhost,127.0.0.1` | Hosts that bypass the proxy |
+| `OPENCODE_SHELL_PROXY_DEBUG` | — | Append diagnostics to `/tmp/opencode/plugin-debug.log` |
 
 ## How it works
 
@@ -89,11 +91,28 @@ Notes:
 - On a cold start (very first run, while `gost` is being downloaded) LLM
   requests may go direct for a few seconds until the first health check
   completes. Shell commands always wait for the check and are gated correctly.
-- Set `OPENCODE_SHELL_PROXY_DEBUG=1` to append plugin diagnostics to
-  `/tmp/opencode/plugin-debug.log`.
 
-`NO_PROXY=localhost,127.0.0.1` is always honoured so local traffic (including
-the opencode TUI server) stays direct.
+`NO_PROXY` (both cases) is set to `localhost,127.0.0.1` by default so local
+traffic (including the opencode TUI server) stays direct; extend it via
+`OPENCODE_SHELL_PROXY_NO_PROXY` if you run local services on other hostnames.
+The plugin writes both upper- and lower-case variable names, since tools
+disagree on which ones they honor (curl, for example, ignores upper-case
+`HTTP_PROXY`).
+
+## Managing the bridge
+
+The bridge is a detached `gost` process shared by all opencode sessions; it
+survives opencode restarts and reboots are clean (nothing auto-starts it).
+
+```bash
+pkill -f 'opencode-shell-proxy/gost'   # stop the bridge
+rm -rf ~/.cache/opencode-shell-proxy   # remove cached gost -> next need re-downloads latest
+```
+
+Sessions re-spawn the bridge automatically on the next health check. If
+something else occupies port 18181, the plugin will reuse it blindly and the
+health check will fail — move the plugin to another port with
+`OPENCODE_SHELL_PROXY_BRIDGE_PORT`.
 
 ## Secrets
 
