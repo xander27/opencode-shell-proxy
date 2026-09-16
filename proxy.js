@@ -239,9 +239,8 @@ export const ProxyPlugin = async ({ client }) => {
   const bridgeUp = await portListening(BRIDGE_PORT())
   debug(`init url=${redact(upstream)} bridged=${bridged} portListening=${bridgeUp}`)
   patchFetch()
-  if (!bridged || bridgeUp) llmOn()
   report("info", `initialized, upstream=${redact(upstream)} bridged=${bridged} proxyUrl=${redact(proxyUrl)}`)
-  check()
+  await check()
 
   return {
     "shell.env": async (input, output) => {
