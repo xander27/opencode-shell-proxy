@@ -85,12 +85,38 @@ At startup the plugin:
 
 Notes:
 
+- In TUI sessions opencode contacts the provider **before** directory plugins
+  load, and Bun reuses that first direct connection pool for the rest of the
+  session. For reliable LLM proxying in the TUI, set the proxy at process
+  start with a shell wrapper (reads the same config, contains no secrets):
+
+  ```bash
+  # ~/.zshrc
+  opencode() {
+    local url="${OPENCODE_SHELL_PROXY:-}"
+    if [ -z "$url" ] && [ -r "$HOME/.config/opencode/shell-proxy.env" ]; then
+      url=$(head -1 "$HOME/.config/opencode/shell-proxy.env")
+      case $url in UPSTREAM=*|URL=*|PROXY=*) url="${url#*=}" ;; esac
+    fi
+    case $url in
+      socks5://*|socks5h://*) url="http://127.0.0.1:${OPENCODE_SHELL_PROXY_BRIDGE_PORT:-18181}" ;;
+      http://*|https://*) : ;;
+      *) command opencode "$@"; return ;;
+    esac
+    HTTPS_PROXY="$url" HTTP_PROXY="$url" NO_PROXY="localhost,127.0.0.1" command opencode "$@"
+  }
+  ```
+
+  Headless `opencode run` does not need the wrapper — the plugin's env is
+  applied before the first LLM request there.
 - gost does not accept the `socks5h://` scheme, so the plugin normalizes it
   to `socks5://` for the bridge. Remote DNS resolution is preserved — verified
   against DNS-poisoned hosts.
 - On a cold start (very first run, while `gost` is being downloaded) LLM
   requests may go direct for a few seconds until the first health check
   completes. Shell commands always wait for the check and are gated correctly.
+- Set `OPENCODE_SHELL_PROXY_DEBUG=1` to append plugin diagnostics to
+  `/tmp/opencode/plugin-debug.log`.
 
 `NO_PROXY` (both cases) is set to `localhost,127.0.0.1` by default so local
 traffic (including the opencode TUI server) stays direct; extend it via
