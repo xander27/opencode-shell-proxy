@@ -168,3 +168,7 @@ opencode connections to the bridge.
 - [Plugins: Inject environment variables](https://opencode.ai/docs/plugins)
 - [Network configuration](https://opencode.ai/docs/network)
 - [gost](https://github.com/go-gost/gost)
+
+## License
+
+[MIT](LICENSE)
